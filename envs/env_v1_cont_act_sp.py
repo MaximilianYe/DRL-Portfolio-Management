@@ -234,7 +234,7 @@ class SimpleUSStockEnv(gym.Env):
         # Record weights before rebalancing
         pre_trade_weights = self.portfolio_weights.copy()
         
-        # Execute rebalancing
+        
         action_probs = np.exp(action)
         action_probs = action_probs / np.sum(action_probs)
 
@@ -249,20 +249,29 @@ class SimpleUSStockEnv(gym.Env):
         new_stock_weights = new_weights[:-1] 
         new_cash_weight = new_weights[-1]   
 
-        # Get current stock weights (excluding cash)
+         # Get current stock weights (excluding cash)
         current_stock_weights = pre_trade_weights[:-1].copy()
-        
-        # Weights after rebalancing
-        post_trade_weights = np.concatenate([new_stock_weights, [new_cash_weight]])
-        self.portfolio_weights = post_trade_weights.copy()
 
-       # Record stock operations
-        today_operations = self._record_stock_operations(pre_trade_weights, post_trade_weights)
-
-        # Calculate transaction cost
-        transaction_cost = 0 #self._calculate_transaction_cost(pre_trade_weights, post_trade_weights)
+        proposed_turnover = np.sum(np.abs(new_stock_weights - current_stock_weights)) / 2
+        MIN_TURNOVER_THRESHOLD = 0.02
         
-        
+        if proposed_turnover < MIN_TURNOVER_THRESHOLD:
+            # no rebalancing
+            post_trade_weights = pre_trade_weights.copy() 
+            step_turnover = 0.0
+            today_operations = []
+            transaction_cost = 0.0
+            
+        else:
+            # Execute rebalancing
+            post_trade_weights = new_weights.copy()
+            step_turnover = proposed_turnover
+            
+            # Record stock operations
+            today_operations = self._record_stock_operations(pre_trade_weights, post_trade_weights)
+            # Calculate transaction cost
+            transaction_cost = 0 #self._calculate_transaction_cost(pre_trade_weights, post_trade_weights)
+            
 
 
         # Advance time, get current day's returns
@@ -270,7 +279,7 @@ class SimpleUSStockEnv(gym.Env):
         current_returns = self._get_current_returns()
 
         # Calculate portfolio return based on post-trade weights
-        portfolio_return = np.sum(self.portfolio_weights * current_returns)
+        portfolio_return = np.sum(post_trade_weights * current_returns)
         
         # After market close, asset values update based on returns
         after_return_values = post_trade_weights * (1 + current_returns)
@@ -280,19 +289,11 @@ class SimpleUSStockEnv(gym.Env):
         self.portfolio_weights = after_return_values / total_value
         self.current_capital *= total_value
 
-        # Calculate turnover (only for stock portion)
-        step_turnover = np.sum(np.abs(new_stock_weights - current_stock_weights)) / 2
+        
         self.turnover_history.append(step_turnover)
         self.total_turnover += step_turnover
 
-        # Minimum turnover threshold
-        MIN_TURNOVER_THRESHOLD = 0.02
-        if step_turnover < MIN_TURNOVER_THRESHOLD:
-            # Keep original weights (no trade)
-            post_trade_weights = pre_trade_weights.copy()
-            self.portfolio_weights = post_trade_weights.copy()
-            step_turnover = 0.0
-            today_operations = []
+        
         
         # Record win rate data
         self.daily_returns.append(portfolio_return)
@@ -325,7 +326,6 @@ class SimpleUSStockEnv(gym.Env):
         regret = portfolio_return - benchmark_return
         
         # Add "regret" (multiplied by a factor) to the total reward.
-        # This factor is a hyperparameter. Using 10.0 here.
         # If portfolio underperforms benchmark (negative regret), it's a penalty.
         reward += regret * 10.0
 

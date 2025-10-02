@@ -381,7 +381,9 @@ def calculate_individual_asset_returns(eval_data, test_days):
     
     for asset_name, asset_df in eval_data.items():
         try:
-            if 'daily_returns' in asset_df.columns:
+            if 'daily_return' in asset_df.columns: 
+                returns_data = asset_df['daily_return'].head(test_days)
+            elif 'daily_returns' in asset_df.columns:
                 returns_data = asset_df['daily_returns'].head(test_days)
             elif 'returns' in asset_df.columns:
                 returns_data = asset_df['returns'].head(test_days)
@@ -828,7 +830,7 @@ actual_length = stock_length
 features_config = ['market_uptrend', 'market_volatility', 'momentum_10d_percentile', 'RSI', 'volatility_22d', 'standard_price', 'momentum_5d'] # 'standard_price', 'RSI', 'rsi_50', 'rsi_5d_trend', 'overbought', 'oversold', 'momentum_5d'
 
 #Modify
-period_length = 44 # 22 # 136   # Days per period 376 #
+period_length = 136   # Days per period 376 #
 initial_capital = 2000
 
 # Split time periods
@@ -853,7 +855,7 @@ prev_weights = None
 all_traded_assets = set()  # Record all traded assets
 period_trading_stats = {}  # Record trading stats for each period
 
-orking_model = model  # Start with the base model
+working_model = model  # Start with the base model
 
 # Modify
 save_dir = "models/us_stock_online_models" # "models/us_stock_enhanced_base" #
@@ -939,7 +941,7 @@ for period_idx, (start_idx, end_idx) in enumerate(periods):
             incremental_data[stock_name] = stock_df.iloc[learn_start:learn_end].copy()
         
         # Execute incremental learning
-        learning_steps = 30000 # min(5000, 1000 * (period_idx + 1))  # Gradually increase learning steps
+        learning_steps = 250000 # min(5000, 1000 * (period_idx + 1))  # Gradually increase learning steps
         working_model = incremental_learning(
             model=working_model,
             new_stock_data=incremental_data,
@@ -1125,6 +1127,7 @@ if all_period_results:
             all_daily_returns.extend(period_result['daily_returns'])
     overall_single_day_max_loss = abs(min(all_daily_returns)) if all_daily_returns else 0.0
 
+    max_drawdown = max_drawdown if max_drawdown > 0.0001 else overall_single_day_max_loss
     # Risk-Adjusted Return
     if max_drawdown > 0.0001:  # Use a small threshold to avoid division by a tiny number
         calmar_ratio = annualized_return / max_drawdown
