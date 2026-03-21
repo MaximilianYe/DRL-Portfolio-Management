@@ -1,48 +1,95 @@
-This project began from a personal question: How could I better allocate my limited capital — from part-time work and internship pay — between ETFs and individual stocks to balance long-term safety and short-term growth? 
+# Hierarchical Multi-Agent RL Trading System
 
-I came up with a simple LP model inspired by Math482 for single-day portfolio optimization and progressively evolves into a multi-period, data-driven strategy guided by historical trends and market state modeling.
+A reinforcement learning-based portfolio optimization system built on a hierarchical multi-agent architecture. Multiple regime-specialized worker agents each learn distinct trading policies via PPO, while a softmax manager dynamically aggregates their actions based on inferred market state — enabling adaptive multi-asset allocation across varying market conditions.
 
-### Phase 1: Linear Programming Allocation
-- Select one ETF and one individual stock from candidate sets
-- Use LP to determine how to invest under budget constraints
+## Architecture
 
-    - ### LP Model Formulation
-    Objective:   Maximize returns r_1 x_1 + r_2 x_2
+```
+                    ┌─────────────────────┐
+                    │   Market Data        │
+                    │   (yfinance)         │
+                    └─────────┬───────────┘
+                              ▼
+                    ┌─────────────────────┐
+                    │ Feature Engineering  │
+                    │ 30-day return seqs   │
+                    └─────────┬───────────┘
+                              ▼
+                    ┌─────────────────────┐
+                    │    GRU Encoder       │
+                    │ Temporal embedding   │
+                    └─────────┬───────────┘
+                              ▼
+               ┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┐
+               │  Worker Agents (N TBD)     │
+               │ ┌────────┐     ┌────────┐ │
+               │ │Agent 1 │ ... │Agent N │ │
+               │ │ (PPO)  │     │ (PPO)  │ │
+               │ └───┬────┘     └───┬────┘ │
+               └─ ─ ─┼─ ─ ─ ─ ─ ─ ─┼─ ─ ─┘
+                      ▼             ▼
+                    ┌─────────────────────┐
+                    │   Softmax Manager   │
+                    │ Weighted aggregation │
+                    └─────────┬───────────┘
+                              ▼
+                    ┌─────────────────────┐
+                    │ Portfolio Allocation │
+                    └─────────────────────┘
+```
 
-    Constraints:  
-      x_1 + x_2 <= 3400 (my budget)  
-      x_1, x_2 >= 0 (long-only, no short-selling)
-      risk(x1, x2) <= RiskTolerance (future work)
+**Key design decisions:**
+
+- **GRU over MLP** — Sequential 30-day return windows capture temporal dependencies that flat feature vectors miss. The GRU encoder produces a compact state embedding shared across all worker agents.
+- **Hierarchical multi-agent** — Instead of a single monolithic policy, multiple worker agents specialize under different market conditions. The number and specialization strategy of workers is an active design question.
+- **Softmax manager** — Learns a soft weighting over worker outputs conditioned on market state, avoiding hard regime switches and enabling smooth policy transitions.
 
 
-### Phase 2: Intelligent Selection
-- Use past data to determine which ETF/stock pair to pick
-- Incorporate simple rules or classifiers
+## Tech Stack
 
-### Phase 3: State Modeling (Markov)
-- Model market as state transitions (bull, bear, volatile)
-- Select assets based on predicted market state
+| Component | Tool |
+|---|---|
+| RL framework | Stable Baselines3 (PPO) |
+| Temporal model | PyTorch GRU |
+| Data source | yfinance |
+| Training env | Google Colab (GPU) |
+| Reproducibility | cuDNN deterministic mode, global seeding |
 
-### Phase 4: Multi-period Optimization (Reinforcement Learning)
-- Treat asset allocation as a sequential decision process
-- Use MDP/Q-learning to learn adaptive strategy
+## Project Structure
 
+```
+.
+├── IA0/                    # Archived: MLP + RL initial 
+├── IA1/                    # Current system (GRU + hierarchical MARL)
+│   ├── agents/             # Worker agent definitions
+│   ├── envs.py             # Custom Gym trading environment
+│   └── model.py            # Training
+└── README.md
+```
 
+> **`IA0/`** archives the first iteration of this project — an MLP-based RL trading system. That phase focused on foundational problems: designing a realistic trading environment, handling dependent action spaces (portfolio weights must sum to 1), and getting PPO to converge on basic allocation tasks. Lessons from IA0 directly informed the current GRU-based architecture.
 
-### Status & Roadmap
-This project is in its early design/documentation phase.
+## Evolution
 
-- [x] Defined LP model structure
-- [x] Implement data loading + ETF/stock selection interface
-        _Utilized AKShare to fetch historical prices of selected assets._
-- [ ] Add performance logging + result plots
-- [ ] (Future) Implement Markov-based state modeling
-- [ ] (Future) Reinforcement Learning simulator
+| Phase | Approach | Key challenges addressed | Status |
+|---|---|---|---|
+| IA0 | MLP + PPO | Env design, dependent action space, basic convergence | ✅ Archived |
+| Current | GRU + hierarchical MARL | Temporal modeling, regime specialization, manager design | 🔧 In progress |
 
+## Open Design Questions
 
-### 📊 Data Source
+- **How many worker agents?** Exploring whether regime-based specialization (bull/bear/sideways) or other decomposition strategies (asset-class, volatility-level) yield better results.
+- **Manager architecture** — Softmax weighting is the current approach; alternatives include attention-based gating or learned mixture-of-experts.
+- **Reward shaping** — Balancing raw returns against risk-adjusted metrics (Sharpe, max drawdown penalties).
 
-This project uses [AKShare](https://github.com/akfamily/akshare) as the data provider for financial market data.  
-AKShare is an open-source Python package designed for academic and research use.
+## Roadmap
 
-[![Data: akshare](https://img.shields.io/badge/Data%20Science-AKShare-green)](https://github.com/akfamily/akshare)
+- [ ] Complete GRU encoder integration with SB3 custom policy
+- [ ] Ablation: single-agent vs multi-agent baseline comparison
+- [ ] Transaction cost modeling in reward function
+- [ ] Walk-forward validation framework
+- [ ] Live paper trading evaluation
+
+## License
+
+MIT
